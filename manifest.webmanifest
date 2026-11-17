@@ -1,0 +1,19 @@
+{
+  "id": "/COFRA-logo/",
+  "name": "COFRA · Tesorería",
+  "short_name": "COFRA",
+  "lang": "es-MX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef3f8",
+  "theme_color": "#182f44",
+  "icons": [
+    {
+      "src": "./cofra-icon-v2.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
