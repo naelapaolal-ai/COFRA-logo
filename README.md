@@ -1,0 +1,1 @@
+# COFRA-logo
