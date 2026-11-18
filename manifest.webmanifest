@@ -9,7 +9,13 @@
   "background_color": "#eef3f8",
   "theme_color": "#182f44",
   "icons": [
-    {
+  {
+    "src": "./cofra-icon-v2.png",
+    "sizes": "1254x1254",
+    "type": "image/png",
+    "purpose": "any"
+  }
+]
       "src": "./cofra-icon-v2.png",
       "sizes": "1254x1254",
       "type": "image/png",
