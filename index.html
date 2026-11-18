@@ -812,26 +812,45 @@ $('reload').onclick=cargar;render();cargar();
   function rpc(nombre,argumento){return new Promise((resolve,reject)=>{const r=google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);if(argumento===undefined)r[nombre]();else r[nombre](argumento);});}
   function mensaje(s){panel.querySelector('.admin-status').textContent=s;}
   function opciones(select,items){select.replaceChildren();for(const [value,label]of items)select.add(new Option(label,value));}
+  function normalizarBusqueda(s){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+  function filtrarConceptos(){
+    if(!modelo)return;
+    const lista=panel.querySelector('#arCodigo'), elegido=lista.value;
+    const palabras=normalizarBusqueda(panel.querySelector('#arBusqueda').value).split(/\s+/).filter(Boolean);
+    const encontrados=modelo.conceptos.filter(c=>{
+      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo);
+      return palabras.every(p=>texto.includes(p));
+    });
+    const visibles=modelo.conceptos.filter(c=>c.codigo===elegido||encontrados.includes(c));
+    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
+    lista.value=elegido;
+    panel.querySelector('#arResultados').textContent=palabras.length?(encontrados.length?encontrados.length+' coincidencia(s). Elige en la lista.':'No hay coincidencias.'):'';
+  }
+  function limpiarBusqueda(){panel.querySelector('#arBusqueda').value='';filtrarConceptos();}
   async function recargar(){
     modelo=await rpc('datosAdministracionCofra');
     const conceptos=modelo.conceptos;
     opciones(panel.querySelector('#acGrupo'),[...new Set(conceptos.map(c=>c.grupo))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acApartado'),[...new Set(conceptos.map(c=>c.apartado))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acPrefijo'),[...new Set(conceptos.map(c=>c.codigo.split('-')[0]))].sort().map(x=>[x,x]));
-    opciones(panel.querySelector('#arCodigo'),[['','Sin concepto'],...conceptos.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
     opciones(panel.querySelector('#arExistente'),[['','Nueva regla'],...modelo.reglas.map(r=>[String(r.fila),r.valores[0]+' · '+r.valores[2]])]);
     nuevaRegla();
   }
-  function nuevaRegla(){panel.querySelector('#arDescripcion').value='';panel.querySelector('#arCodigo').value='';panel.querySelector('#arEstado').value='PENDIENTE';panel.querySelector('#arTipo').value='EXACTA';}
+  function nuevaRegla(){limpiarBusqueda();panel.querySelector('#arDescripcion').value='';panel.querySelector('#arCodigo').value='';panel.querySelector('#arEstado').value='PENDIENTE';panel.querySelector('#arTipo').value='EXACTA';}
   async function guardar(btn,accion){btn.disabled=true;try{const r=await accion();await recargar();mensaje(r.mensaje);}catch(e){mensaje(e.message||String(e));}finally{btn.disabled=false;}}
   if(typeof google==='undefined'||!google.script?.run){estado.textContent='Abre la aplicación desde Apps Script para verificar tu sesión.';return;}
   google.script.run.withSuccessHandler(s=>{
     estado.textContent='Sesión: '+s.correo+' · '+(s.contador?'Contador':'Consulta');
     if(!s.contador)return;
     panel=document.createElement('section');panel.id='adminCofra';panel.className='screen-only';
-    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
+    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, grupo o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
     main.append(panel);
+    const busqueda=panel.querySelector('#arBusqueda');
+    busqueda.addEventListener('input',filtrarConceptos);
+    busqueda.addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();});
     panel.querySelector('#arExistente').onchange=()=>{
+      if(!modelo)return;
+      limpiarBusqueda();
       const r=modelo.reglas.find(r=>String(r.fila)===panel.querySelector('#arExistente').value);
       if(!r){nuevaRegla();return;}
       panel.querySelector('#arDescripcion').value=r.valores[0];panel.querySelector('#arCodigo').value=r.valores[1];panel.querySelector('#arEstado').value=r.valores[2];panel.querySelector('#arTipo').value=r.valores[3]||'EXACTA';
