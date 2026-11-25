@@ -202,6 +202,13 @@ let datos=null,selectedDay='',focusBefore=null,loading=false,vistaActiva='report
 $('month').innerHTML=months.map((m,i)=>'<option value="'+(i+1)+'">'+m+'</option>').join('');
 function say(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
 function bucket(r){const t=norm(r.destination);if(r.status==='PENDIENTE'||!t||/pendiente|revisar/.test(t))return groups[3];if(/propiedad|infraestructura/.test(t))return groups[0];if(/financ|credito/.test(t))return groups[2];if(/nomina|empresa/.test(t))return groups[1];return groups[3];}
+const gastosEmpresa='Gastos de empresa';
+const clavesNomina=new Set(['EMP-001','EMP-002','EMP-003','EMP-036','EMP-037','EMP-038','EMP-040','EMP-041','EMP-042','EMP-043','EMP-044','EMP-045','EMP-078']);
+// El apartado original se conserva para presupuesto y reportes históricos.
+function apartadoReporte(r){
+ return r.bucket===groups[1]&&!clavesNomina.has(norm(r.code).toUpperCase())?gastosEmpresa:r.bucket;
+}
+function usaDesgloseEmpresa(reporte){return reporte?.result?.some(r=>r.action==='outReporte:'+gastosEmpresa);}
 function rows(kind,accumulated=false){const p=period(),c=datos?.cierres?.[p];if(datos?.lecturaIncompleta&&!c?.cerrado)return[];return(datos?.[kind]?.records||[]).filter(r=>{const k=r.periodo||r.date.slice(0,7);return accumulated?k.slice(0,4)===p.slice(0,4)&&k<=p:k===p;});}
 function summary(){
  if(datos?.cierres?.[period()]?.cerrado)return datos.cierres[period()].reporte;
@@ -212,7 +219,10 @@ function summary(){
  const result=[];const section=name=>result.push({name,style:'section'});
  const add=(name,m,a,style='',action='')=>result.push({name,m,a,mp:pct(m,iv),ap:pct(a,aiv),style,action});
  section('INGRESOS');['Comisiones','Mensualidades'].forEach(t=>add(t,by(i,'type',t),by(ai,'type',t),'','in:'+t));add('Total de ingresos',iv,aiv,'subtotal');
- section('GASTOS GENERALES');groups.slice(0,2).forEach(g=>add(g,by(e,'bucket',g),by(ae,'bucket',g),'','out:'+g));add('Total de gastos generales',generales(e),generales(ae),'subtotal');add('Resultado después de gastos generales',despues(iv,e),despues(aiv,ae),'subtotal');
+ const porApartado=rs=>g=>rs.length?sum(rs.filter(r=>apartadoReporte(r)===g)):null;
+ const apartadoMes=porApartado(e),apartadoAcumulado=porApartado(ae);
+ section('GASTOS GENERALES');
+ [groups[0],groups[1],gastosEmpresa].forEach(g=>add(g,apartadoMes(g),apartadoAcumulado(g),'','outReporte:'+g));add('Total de gastos generales',generales(e),generales(ae),'subtotal');add('Resultado después de gastos generales',despues(iv,e),despues(aiv,ae),'subtotal');
  section('OTROS INGRESOS Y GASTOS');add(groups[2],by(e,'bucket',groups[2]),by(ae,'bucket',groups[2]),'','out:'+groups[2]);add('Total de gastos financieros',by(e,'bucket',groups[2]),by(ae,'bucket',groups[2]),'subtotal');
  section('GASTOS POR CLASIFICAR');const pendiente=by(e,'bucket',groups[3]);add(groups[3],pendiente,by(ae,'bucket',groups[3]),'','out:'+groups[3]);add('Total de gastos registrados',ev,aev,'subtotal');section('IMPUESTOS');add('Total de impuestos',null,null,'subtotal');add('UTILIDAD/PÉRDIDA',diff(iv,ev),diff(aiv,aev),'final');return{result,iv,ev,pendiente};
 }
@@ -279,7 +289,7 @@ document.addEventListener('click',e=>{
  if(day){selectedDay=day.dataset.day;daily();}
  if(action){
   const [k,...rest]=action.dataset.action.split(':'),v=rest.join(':');
-  const kind=k==='in'?'ingresos':'gastos',rs=rows(kind).filter(r=>(k==='in'?r.type:r.bucket)===v);
+  const kind=k==='in'?'ingresos':'gastos',rs=rows(kind).filter(r=>(k==='in'?r.type:k==='outReporte'?apartadoReporte(r):r.bucket)===v);
   openDetail(v+' · '+periodLabel(),k==='in'?detailTable(rs,kind):groupedExpenseDetail(rs));
  }
  if(concept){const rs=rows('gastos').filter(r=>(r.code||'__pendiente')===concept.dataset.concept);if(rs.length)openDetail(rs[0].concept+' · '+periodLabel(),detailTable(rs,'gastos'));}
@@ -471,8 +481,9 @@ $('excel').onclick=()=>{
  const x=window.XLSX,wb=x.utils.book_new();
  function addSheet(name,data,widths,header,formats,filter){const ws=x.utils.aoa_to_sheet(data);ws['!cols']=widths.map(wch=>({wch}));if(filter)ws['!autofilter']={ref:x.utils.encode_range({s:{r:header,c:0},e:{r:data.length-1,c:widths.length-1}})};for(let r=header+1;r<data.length;r++)Object.entries(formats).forEach(([col,format])=>{const c=ws[x.utils.encode_cell({r,c:Number(col)})];if(c?.t==='n')c.z=format;});x.utils.book_append_sheet(wb,ws,name);}
  const moneda='"$"#,##0.00;-"$"#,##0.00',fecha='dd/mm/yyyy';
- const resumen=[['Reporte de resultados · '+periodLabel()],['Concepto','Este mes','% ingresos','Acumulado','% ingresos'],...summary().result.map(r=>r.style==='section'?[r.name]:[r.name,r.m,r.mp,r.a,r.ap])];
- const gastos=[['Fecha','Descripción','Clave','Concepto','Grupo','Apartado','Importe','Estado','Pestaña','Fila','Motivo'],...sorted(rows('gastos')).map(r=>[excelDate(r.date),r.description,r.code,r.concept,r.group,r.bucket,r.amount,r.bucket===groups[3]?'PENDIENTE':r.status,r.sheet,r.row,r.reason])];
+ const reporte=summary(),separaEmpresa=usaDesgloseEmpresa(reporte);
+ const resumen=[['Reporte de resultados · '+periodLabel()],['Concepto','Este mes','% ingresos','Acumulado','% ingresos'],...reporte.result.map(r=>r.style==='section'?[r.name]:[r.name,r.m,r.mp,r.a,r.ap])];
+ const gastos=[['Fecha','Descripción','Clave','Concepto','Grupo','Apartado','Importe','Estado','Pestaña','Fila','Motivo'],...sorted(rows('gastos')).map(r=>[excelDate(r.date),r.description,r.code,r.concept,r.group,separaEmpresa?apartadoReporte(r):r.bucket,r.amount,r.bucket===groups[3]?'PENDIENTE':r.status,r.sheet,r.row,r.reason])];
  const ingresos=[['Fecha original','Periodo','Día del reporte','Tipo','Descripción','Grupo','Referencia','Ingreso','Pestaña','Fila'],...sorted(rows('ingresos')).map(r=>[excelDate(r.date),r.periodo,excelDate(r.reportDate),r.type,r.description,r.group,r.reference,r.amount,r.sheet,r.row])];
  addSheet('Resumen',resumen,[48,18,14,18,14],1,{1:moneda,2:'0.00%',3:moneda,4:'0.00%'},false);addSheet('Gastos del mes',gastos,[14,44,14,30,24,36,16,16,26,8,45],0,{0:fecha,6:moneda},true);addSheet('Ingresos del mes',ingresos,[16,12,16,18,40,24,16,16,27,8],0,{0:fecha,2:fecha,6:moneda,7:moneda},true);addSheet('Estado del reporte',[['Periodo',period()],['Estado',textoEstadoCierre()],['Consulta',datos.consultadoEn],['Acumulado','Un mes cerrado conserva el acumulado guardado al cerrarlo.']], [25,100],0,{},false);const presupuesto=modeloPresupuesto();
  if(presupuesto){
@@ -812,26 +823,45 @@ $('reload').onclick=cargar;render();cargar();
   function rpc(nombre,argumento){return new Promise((resolve,reject)=>{const r=google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);if(argumento===undefined)r[nombre]();else r[nombre](argumento);});}
   function mensaje(s){panel.querySelector('.admin-status').textContent=s;}
   function opciones(select,items){select.replaceChildren();for(const [value,label]of items)select.add(new Option(label,value));}
+  function normalizarBusqueda(s){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+  function filtrarConceptos(){
+    if(!modelo)return;
+    const lista=panel.querySelector('#arCodigo'), elegido=lista.value;
+    const palabras=normalizarBusqueda(panel.querySelector('#arBusqueda').value).split(/\s+/).filter(Boolean);
+    const encontrados=modelo.conceptos.filter(c=>{
+      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo);
+      return palabras.every(p=>texto.includes(p));
+    });
+    const visibles=modelo.conceptos.filter(c=>c.codigo===elegido||encontrados.includes(c));
+    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
+    lista.value=elegido;
+    panel.querySelector('#arResultados').textContent=palabras.length?(encontrados.length?encontrados.length+' coincidencia(s). Elige en la lista.':'No hay coincidencias.'):'';
+  }
+  function limpiarBusqueda(){panel.querySelector('#arBusqueda').value='';filtrarConceptos();}
   async function recargar(){
     modelo=await rpc('datosAdministracionCofra');
     const conceptos=modelo.conceptos;
     opciones(panel.querySelector('#acGrupo'),[...new Set(conceptos.map(c=>c.grupo))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acApartado'),[...new Set(conceptos.map(c=>c.apartado))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acPrefijo'),[...new Set(conceptos.map(c=>c.codigo.split('-')[0]))].sort().map(x=>[x,x]));
-    opciones(panel.querySelector('#arCodigo'),[['','Sin concepto'],...conceptos.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
     opciones(panel.querySelector('#arExistente'),[['','Nueva regla'],...modelo.reglas.map(r=>[String(r.fila),r.valores[0]+' · '+r.valores[2]])]);
     nuevaRegla();
   }
-  function nuevaRegla(){panel.querySelector('#arDescripcion').value='';panel.querySelector('#arCodigo').value='';panel.querySelector('#arEstado').value='PENDIENTE';panel.querySelector('#arTipo').value='EXACTA';}
+  function nuevaRegla(){limpiarBusqueda();panel.querySelector('#arDescripcion').value='';panel.querySelector('#arCodigo').value='';panel.querySelector('#arEstado').value='PENDIENTE';panel.querySelector('#arTipo').value='EXACTA';}
   async function guardar(btn,accion){btn.disabled=true;try{const r=await accion();await recargar();mensaje(r.mensaje);}catch(e){mensaje(e.message||String(e));}finally{btn.disabled=false;}}
   if(typeof google==='undefined'||!google.script?.run){estado.textContent='Abre la aplicación desde Apps Script para verificar tu sesión.';return;}
   google.script.run.withSuccessHandler(s=>{
     estado.textContent='Sesión: '+s.correo+' · '+(s.contador?'Contador':'Consulta');
     if(!s.contador)return;
     panel=document.createElement('section');panel.id='adminCofra';panel.className='screen-only';
-    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
+    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, grupo o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
     main.append(panel);
+    const busqueda=panel.querySelector('#arBusqueda');
+    busqueda.addEventListener('input',filtrarConceptos);
+    busqueda.addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();});
     panel.querySelector('#arExistente').onchange=()=>{
+      if(!modelo)return;
+      limpiarBusqueda();
       const r=modelo.reglas.find(r=>String(r.fila)===panel.querySelector('#arExistente').value);
       if(!r){nuevaRegla();return;}
       panel.querySelector('#arDescripcion').value=r.valores[0];panel.querySelector('#arCodigo').value=r.valores[1];panel.querySelector('#arEstado').value=r.valores[2];panel.querySelector('#arTipo').value=r.valores[3]||'EXACTA';
