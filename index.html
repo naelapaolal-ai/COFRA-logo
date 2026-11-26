@@ -160,8 +160,8 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 </section>
 </section>
 <section id="dailyView" hidden><div class="panel"><h2>Calendario de movimientos</h2><p class="note">“Sin registros” no confirma que el día esté cerrado. Los ingresos sin día asignado permanecen en el total y detalle mensual.</p><div id="calendar" class="calendar"></div></div><div class="panel"><h2 id="dayTitle"></h2><button type="button" id="clearDay" class="screen-only">Ver todo el mes</button><div id="dailyConceptFilter" class="daily-concept-filter screen-only">
-<label for="dailyConcept">Buscar por concepto exacto
-<input id="dailyConcept" type="search" placeholder="Ej. PAGO COFRA NÓMINA" autocomplete="off"></label>
+<label for="dailyConcept">Buscar movimientos por palabras
+<input id="dailyConcept" type="search" placeholder="Ej. Samuel o Samuel trabajos" autocomplete="off"></label>
 <button type="button" id="clearDailyConcept">Limpiar búsqueda</button>
 </div>
 <p id="dailyConceptStatus" class="note" role="status" hidden></p>
@@ -246,23 +246,26 @@ function daily(){
  $('calendar').innerHTML=html;$('dayTitle').textContent=selectedDay?'Detalle del '+dateLabel(selectedDay):'Detalle del mes';renderDailyDetail(e,i);
 }
 function renderDailyDetail(gastos=rows('gastos'),ingresos=rows('ingresos')){
- const normalizeDescription=value=>norm(value).replace(/\s+/g,' ');
- const query=selectedDay?'':normalizeDescription($('dailyConcept').value);
- const matches=r=>normalizeDescription(r.description)===query;
+ const textoBusqueda=value=>norm(value).replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+ const query=selectedDay?[]:textoBusqueda($('dailyConcept').value).split(' ').filter(Boolean);
+ const matches=r=>{
+  const descripcion=textoBusqueda(r.description);
+  return query.every(palabra=>descripcion.includes(palabra));
+ };
  if(selectedDay){
   gastos=gastos.filter(r=>r.date===selectedDay);
   ingresos=ingresos.filter(r=>r.reportDate===selectedDay);
- }else if(query){
+ }else if(query.length){
   gastos=gastos.filter(matches);
   ingresos=ingresos.filter(matches);
  }
  $('dailyConceptFilter').hidden=Boolean(selectedDay);
  const status=$('dailyConceptStatus');
- status.hidden=!query;
- status.textContent=query
+ status.hidden=!query.length;
+ status.textContent=query.length
   ? gastos.length+ingresos.length
     ? 'Coincidencias: '+gastos.length+' gastos y '+ingresos.length+' ingresos. Los totales corresponden a la búsqueda.'
-    : 'No hay movimientos con ese concepto exacto en el mes seleccionado. Escribe la descripción completa.'
+    : 'No hay movimientos que coincidan con todas esas palabras en el mes seleccionado.'
   : '';
  $('dailyExpense').innerHTML=detailTable(gastos,'gastos');
  $('dailyIncome').innerHTML=detailTable(ingresos,'ingresos');
