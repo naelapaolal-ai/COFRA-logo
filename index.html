@@ -143,8 +143,8 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 <label id="compareCurrentMonthLabel" hidden>Mes del año seleccionado <select id="compareCurrentMonth"></select></label>
 <label>Año base <select id="compareYear"><option value="">Sin comparación</option></select></label>
 <label id="compareMetricLabel">Indicador <select id="compareMetric" disabled>
-<option value="1">Ingresos</option><option value="6">Gastos totales</option><option value="7">UTILIDAD/PÉRDIDA</option>
-<option value="2">Propiedades e inversiones</option><option value="3">Nóminas</option><option value="4">Gastos financieros</option><option value="5">Por clasificar</option>
+<option value="1">Ingresos</option><option value="7">Gastos totales</option><option value="8">UTILIDAD/PÉRDIDA</option>
+<option value="2">Propiedades e inversiones</option><option value="3">Nóminas</option><option value="4">Gastos de empresa</option><option value="5">Gastos financieros</option><option value="6">Por clasificar</option>
 </select></label>
 </div>
 <p class="note" id="compareStatus" role="status"></p>
@@ -311,7 +311,9 @@ function cargar(mensajeConfirmado){
   }catch(error){datos=anterior;selectedDay=dayBefore;$('year').innerHTML=optionsBefore;$('year').value=yearBefore;render();say('No se completó la lectura: '+error.message,true);}finally{finish();}
  }).withFailureHandler(error=>{datos=null;closeDetail();render();say('No se pudo consultar Google Sheets: '+(error?.message||String(error)),true);finish();}).obtenerDatosTesoreria();
 }
-const columnasAnuales=['Mes','Ingresos','Propiedades e inversiones','Nóminas','Gastos financieros','Por clasificar','Gastos totales','UTILIDAD/PÉRDIDA','Estado'];
+const rubrosAnuales=[groups[0],groups[1],gastosEmpresa,groups[2],groups[3]];
+const columnasAnuales=['Mes','Ingresos','Propiedades e inversiones','Nóminas',gastosEmpresa,'Gastos financieros','Por clasificar','Gastos totales','UTILIDAD/PÉRDIDA','Estado'];
+const colGastoTotal=columnasAnuales.indexOf('Gastos totales'),colEstadoAnual=columnasAnuales.length-1;
 function calcularAnual(fuente,anio){
  const agrupar=(registros,tipo)=>{
   const mapa=new Map();
@@ -327,17 +329,17 @@ function calcularAnual(fuente,anio){
  const ingresos=agrupar(fuente.ingresos.records,'ingresos'),gastos=agrupar(fuente.gastos.records,'gastos');
  const filas=months.map((m,j)=>{
   const p=anio+'-'+String(j+1).padStart(2,'0'), i=ingresos.get(p)||[],e=gastos.get(p)||[];
-  const montos=[value(i),...groups.map(g=>e.length?sum(e.filter(r=>r.bucket===g)):null),value(e),diff(value(i),value(e))];
+  const montos=[value(i),...rubrosAnuales.map(g=>e.length?sum(e.filter(r=>apartadoReporte(r)===g)):null),value(e),diff(value(i),value(e))];
   const estado=fuente.cierres?.[p]?.cerrado?'Cerrado':i.length&&e.length?'Abierto · Con registros':i.length||e.length?'Abierto · Parcial':'Sin registros';
   return [m,...montos,estado];
  });
- const mesesConAmbas=filas.filter(f=>f[1]!==null&&f[6]!==null).length;
+ const mesesConAmbas=filas.filter(f=>f[1]!==null&&f[colGastoTotal]!==null).length;
  const totalCol=k=>{const v=filas.map(f=>f[k]).filter(n=>n!==null);return v.length?v.reduce((a,b)=>a+b,0):null;};
- const totales=Array.from({length:6},(_,j)=>totalCol(j+1));
+ const totales=Array.from({length:colGastoTotal},(_,j)=>totalCol(j+1));
  const estado=mesesConAmbas===12?'12 meses con registros de ambas fuentes':'Parcial · '+mesesConAmbas+' de 12 meses con ambas fuentes';
  // No se presenta una diferencia anual si hay meses con solo una fuente.
- const comparable=filas.every(f=>(f[1]===null)===(f[6]===null));
- const diferencia=comparable?diff(totales[0],totales[5]):null;
+ const comparable=filas.every(f=>(f[1]===null)===(f[colGastoTotal]===null));
+ const diferencia=comparable?diff(totales[0],totales[colGastoTotal-1]):null;
  return {filas,total:['Total registrado',...totales,diferencia,estado],estado,comparable};
 }
 const centavosComparativo=n=>n==null?null:Math.sign(n)*Number(Math.abs(n).toLocaleString('en-US',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:2}).replace('.',''));
@@ -363,16 +365,16 @@ function comparativoSeleccionado(actual,anio){
   if(base===anio&&a===b)return null;
   const anterior=(base===anio?actual:calcularAnual(datos,base)).filas[b], nuevo=actual.filas[a];
   const periodoBase=anterior[0]+' '+base, periodoNuevo=nuevo[0]+' '+anio;
-  const filas=columnasAnuales.slice(1,8).map((nombre,j)=>filaComparativa(nombre,centavosComparativo(anterior[j+1]),centavosComparativo(nuevo[j+1])));
+  const filas=columnasAnuales.slice(1,colEstadoAnual).map((nombre,j)=>filaComparativa(nombre,centavosComparativo(anterior[j+1]),centavosComparativo(nuevo[j+1])));
   return {base,filas,titulo:periodoNuevo+' frente a '+periodoBase,
    encabezados:['Rubro',periodoBase+' · Base',periodoNuevo,'Diferencia registrada','Cambio %'],
    archivo:anio+'-'+String(a+1).padStart(2,'0')+'_vs_'+base+'-'+String(b+1).padStart(2,'0'),
-   nota:'Base: '+anterior[8]+'. Seleccionado: '+nuevo[8]+'. Un guion indica falta de datos o que la base es cero para el porcentaje.'};
+   nota:'Base: '+anterior[colEstadoAnual]+'. Seleccionado: '+nuevo[colEstadoAnual]+'. Un guion indica falta de datos o que la base es cero para el porcentaje.'};
  }
  if($('compareMode').value==='full'){
   if(base===anio)return null;
   const anualBase=calcularAnual(datos,base);
-  const filas=columnasAnuales.slice(1,8).flatMap((rubro,j)=>{
+  const filas=columnasAnuales.slice(1,colEstadoAnual).flatMap((rubro,j)=>{
    const c=compararAnuales(actual,anualBase,j+1);
    return [[rubro+' · Total comparable ('+c.meses+'/12 meses)',...c.total.slice(1)],
     ...c.filas.map(f=>[rubro+' · '+f[0],...f.slice(1)])];
@@ -382,7 +384,7 @@ function comparativoSeleccionado(actual,anio){
    nota:'Incluye todos los rubros. Cada total comparable suma solo los meses con importes en ambos años para ese rubro.'};
  }
  const columna=Number($('compareMetric').value);
- if(!base||base===anio||columna<1||columna>7||!Number.isInteger(columna))return null;
+ if(!base||base===anio||columna<1||columna>=colEstadoAnual||!Number.isInteger(columna))return null;
  return {base,titulo:columnasAnuales[columna]+' · '+anio+' frente a '+base,archivo:anio+'_vs_'+base,indicador:columnasAnuales[columna],...compararAnuales(actual,calcularAnual(datos,base),columna)};
 }
 function encabezadosComparativo(base,anio){
@@ -422,7 +424,7 @@ function renderAnual(){
  if(!datos){$('annualStatus').textContent='Datos aún no cargados.';$('annualBody').innerHTML='';return;}
  const a=calcularAnual(datos,anio);
  $('annualStatus').textContent=a.estado+'. '+(!a.comparable?'La diferencia del total se omite porque hay meses con solo una fuente. ':'')+(datos.lecturaIncompleta?'Solo se pudieron leer los meses cerrados.':'');
- const fila=(f,clase='')=>'<tr'+(clase?' class="'+clase+'"':'')+'><th scope="row">'+esc(f[0])+'</th>'+f.slice(1,8).map(v=>'<td class="number">'+(v==null?'—':cash(v))+'</td>').join('')+'<td>'+esc(f[8])+'</td></tr>';
+ const fila=(f,clase='')=>'<tr'+(clase?' class="'+clase+'"':'')+'><th scope="row">'+esc(f[0])+'</th>'+f.slice(1,colEstadoAnual).map(v=>'<td class="number">'+(v==null?'—':cash(v))+'</td>').join('')+'<td>'+esc(f[colEstadoAnual])+'</td></tr>';
  $('annualBody').innerHTML=a.filas.map(f=>fila(f)).join('')+fila(a.total,'subtotal');
  renderComparativo(a,anio);
 }
@@ -433,8 +435,8 @@ function exportarAnual(){
   const anio=$('year').value,a=calcularAnual(datos,anio),x=window.XLSX,wb=x.utils.book_new();
   const notas=[a.estado,datos.lecturaIncompleta?'Solo se pudieron leer los meses cerrados.':'',!a.comparable?'Diferencia anual omitida: hay meses con una sola fuente.':''].filter(Boolean).join('. ');
   const ws=x.utils.aoa_to_sheet([['Reporte anual · '+anio],columnasAnuales,...a.filas,a.total,[],[notas]]);
-  ws['!cols']=[{wch:24},...Array.from({length:7},()=>({wch:24})),{wch:47}];
-  for(let r=2;r<=14;r++)for(let c=1;c<=7;c++){const celda=ws[x.utils.encode_cell({r,c})];if(celda?.t==='n')celda.z='"$"#,##0.00;-"$"#,##0.00';}
+  ws['!cols']=[{wch:24},...Array.from({length:colEstadoAnual-1},()=>({wch:24})),{wch:47}];
+  for(let r=2;r<=14;r++)for(let c=1;c<colEstadoAnual;c++){const celda=ws[x.utils.encode_cell({r,c})];if(celda?.t==='n')celda.z='"$"#,##0.00;-"$"#,##0.00';}
   x.utils.book_append_sheet(wb,ws,'Reporte anual');
   x.writeFile(wb,'COFRA_Reporte_Anual_'+anio+'.xlsx');
  }catch(error){say('No se pudo descargar el Excel anual: '+error.message,true);}
@@ -824,16 +826,23 @@ $('reload').onclick=cargar;render();cargar();
   function mensaje(s){panel.querySelector('.admin-status').textContent=s;}
   function opciones(select,items){select.replaceChildren();for(const [value,label]of items)select.add(new Option(label,value));}
   function normalizarBusqueda(s){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+  function apartadoConcepto(c){
+    const t=norm(c.apartado);
+    if(t==='gastos de empresa'||((/nomina|empresa/.test(t))&&!/propiedad|infraestructura|financ|credito|pendiente|revisar/.test(t))) {
+      return clavesNomina.has(norm(c.codigo).toUpperCase())?groups[1]:gastosEmpresa;
+    }
+    return c.apartado;
+  }
   function filtrarConceptos(){
     if(!modelo)return;
     const lista=panel.querySelector('#arCodigo'), elegido=lista.value;
     const palabras=normalizarBusqueda(panel.querySelector('#arBusqueda').value).split(/\s+/).filter(Boolean);
     const encontrados=modelo.conceptos.filter(c=>{
-      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo);
+      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo+' '+apartadoConcepto(c));
       return palabras.every(p=>texto.includes(p));
     });
     const visibles=modelo.conceptos.filter(c=>c.codigo===elegido||encontrados.includes(c));
-    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
+    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+'] · '+apartadoConcepto(c)])]);
     lista.value=elegido;
     panel.querySelector('#arResultados').textContent=palabras.length?(encontrados.length?encontrados.length+' coincidencia(s). Elige en la lista.':'No hay coincidencias.'):'';
   }
@@ -842,7 +851,7 @@ $('reload').onclick=cargar;render();cargar();
     modelo=await rpc('datosAdministracionCofra');
     const conceptos=modelo.conceptos;
     opciones(panel.querySelector('#acGrupo'),[...new Set(conceptos.map(c=>c.grupo))].sort().map(x=>[x,x]));
-    opciones(panel.querySelector('#acApartado'),[...new Set(conceptos.map(c=>c.apartado))].sort().map(x=>[x,x]));
+    opciones(panel.querySelector('#acApartado'),[...new Set([...conceptos.map(c=>c.apartado),gastosEmpresa])].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acPrefijo'),[...new Set(conceptos.map(c=>c.codigo.split('-')[0]))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#arExistente'),[['','Nueva regla'],...modelo.reglas.map(r=>[String(r.fila),r.valores[0]+' · '+r.valores[2]])]);
     nuevaRegla();
@@ -854,7 +863,7 @@ $('reload').onclick=cargar;render();cargar();
     estado.textContent='Sesión: '+s.correo+' · '+(s.contador?'Contador':'Consulta');
     if(!s.contador)return;
     panel=document.createElement('section');panel.id='adminCofra';panel.className='screen-only';
-    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, grupo o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
+    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>Para Gastos de empresa, elige un grupo de empresa y la serie EMP. Nómina conserva los 13 conceptos definidos.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, apartado o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
     main.append(panel);
     const busqueda=panel.querySelector('#arBusqueda');
     busqueda.addEventListener('input',filtrarConceptos);
