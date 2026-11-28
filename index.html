@@ -16,6 +16,7 @@
  body:not(.print-compare) #comparePanel{display:none!important}
  body.print-compare main > :not(#annualView),body.print-compare #annualOverview{display:none!important}
  body.print-compare #comparePanel{margin:0}
+ body.print-amort main > :not(#amortView){display:none!important}
 }
 .daily-concept-filter{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:14px 0}
 .daily-concept-filter label{display:grid;gap:6px;flex:1 1 240px;max-width:440px}
@@ -40,7 +41,7 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
  const deployment='AKfycbxEld_l9wFiizE3b5x10pAj9lVGDMgv8NmMkhChTdHlQSamPFJpmnCSMDUBM94140pr';
  const scopes='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email';
  let token='',vence=0,espera=[],autorizando=false;
- const permitidas=new Set(['obtenerDatosTesoreria','obtenerSesionCofra','datosAdministracionCofra','guardarConceptoCofra','guardarReglaCofra','prepararCierreCofra','cerrarMesCofra','reabrirMesCofra','guardarPresupuestoCofra']);
+ const permitidas=new Set(['obtenerDatosTesoreria','obtenerAmortizacionCofra','obtenerSesionCofra','datosAdministracionCofra','guardarConceptoCofra','guardarReglaCofra','prepararCierreCofra','cerrarMesCofra','reabrirMesCofra','guardarPresupuestoCofra']);
  const mensaje=t=>{const n=document.getElementById('cofraAccesoMensaje');if(n)n.textContent=t;};
  function requerirSesion(){
   if(token&&Date.now()<vence)return Promise.resolve();
@@ -100,10 +101,10 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 </head><body class="sin-sesion">
 <section id="cofraAcceso"><div class="tarjeta"><img src="./COFRA-LOGO.jpeg" alt="COFRA"><h1>Tesorería</h1><p id="cofraAccesoMensaje" role="status">Entra con tu cuenta de Google autorizada.</p><button id="cofraEntrar" class="primary" type="button" onclick="cofraEntrar()">Entrar con Google</button><p><small>Se requiere conexión a internet para consultar y guardar datos.</small></p></div></section>
 
-<aside class="sidebar"><div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>COFRA<small>TESORERÍA</small></span></div><p class="nav-label">CONSULTA</p><nav aria-label="Secciones"><button type="button" class="active" data-view="report"><span class="nav-icon">▤</span>Reporte general</button><button type="button" data-view="annual"><span class="nav-icon">▤</span>Reporte anual</button><button type="button" data-view="daily"><span class="nav-icon">▦</span>Movimientos diarios</button><button type="button" data-view="concepts"><span class="nav-icon">☷</span>Conceptos</button><button type="button" data-view="presupuesto"><span class="nav-icon">◫</span>Presupuesto mensual</button><button type="button" data-view="sources"><span class="nav-icon">↗</span>Fuentes de datos</button></nav><div class="sidebar-bottom"><strong>Google Sheets</strong>Consulta al abrir y al pulsar Actualizar datos.</div></aside>
+<aside class="sidebar"><div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>COFRA<small>TESORERÍA</small></span></div><p class="nav-label">CONSULTA</p><nav aria-label="Secciones"><button type="button" class="active" data-view="report"><span class="nav-icon">▤</span>Reporte general</button><button type="button" data-view="annual"><span class="nav-icon">▤</span>Reporte anual</button><button type="button" data-view="amort"><span class="nav-icon">▤</span>Amortización de créditos</button><button type="button" data-view="daily"><span class="nav-icon">▦</span>Movimientos diarios</button><button type="button" data-view="concepts"><span class="nav-icon">☷</span>Conceptos</button><button type="button" data-view="presupuesto"><span class="nav-icon">◫</span>Presupuesto mensual</button><button type="button" data-view="sources"><span class="nav-icon">↗</span>Fuentes de datos</button></nav><div class="sidebar-bottom"><strong>Google Sheets</strong>Consulta al abrir y al pulsar Actualizar datos.</div></aside>
 <div class="appbar"><div class="breadcrumb"><span>COFRA</span><span>/</span><strong id="ruta">Reporte general</strong></div><div class="actions"><button id="cofraInstalar" type="button" onclick="cofraInstalar()" hidden>Instalar COFRA</button><button id="cofraSalir" type="button" onclick="cofraSalir()">Salir</button><span>Google Sheets</span></div></div>
 <main><div class="heading"><div><div class="eyebrow">CONTROL Y SEGUIMIENTO</div><h1>Resumen de tesorería</h1><p>Consulta los ingresos, las salidas del periodo y el detalle de cada concepto.</p></div><button type="button" id="reload" class="primary">Actualizar datos</button></div>
-<div class="panel period"><div><label id="monthLabel">Periodo<select id="month"></select></label><label>Año<select id="year"><option>2026</option></select></label></div><div class="actions"><span class="source-label">Fuente: Google Sheets</span><button type="button" id="print">Imprimir / PDF</button><button type="button" id="excel" disabled>Descargar Excel</button></div></div>
+<div id="periodoTesoreria" class="panel period"><div><label id="monthLabel">Periodo<select id="month"></select></label><label>Año<select id="year"><option>2026</option></select></label></div><div class="actions"><span class="source-label">Fuente: Google Sheets</span><button type="button" id="print">Imprimir / PDF</button><button type="button" id="excel" disabled>Descargar Excel</button></div></div>
 <section id="cierrePanel" class="panel screen-only" hidden>
   <div class="actions">
     <div><strong id="cierreEstado"></strong><p id="cierreDescripcion" class="note"></p></div>
@@ -143,8 +144,8 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 <label id="compareCurrentMonthLabel" hidden>Mes del año seleccionado <select id="compareCurrentMonth"></select></label>
 <label>Año base <select id="compareYear"><option value="">Sin comparación</option></select></label>
 <label id="compareMetricLabel">Indicador <select id="compareMetric" disabled>
-<option value="1">Ingresos</option><option value="6">Gastos totales</option><option value="7">UTILIDAD/PÉRDIDA</option>
-<option value="2">Propiedades e inversiones</option><option value="3">Nóminas</option><option value="4">Gastos financieros</option><option value="5">Por clasificar</option>
+<option value="1">Ingresos</option><option value="7">Gastos totales</option><option value="8">UTILIDAD/PÉRDIDA</option>
+<option value="2">Propiedades e inversiones</option><option value="3">Nóminas</option><option value="4">Gastos de empresa</option><option value="5">Gastos financieros</option><option value="6">Por clasificar</option>
 </select></label>
 </div>
 <p class="note" id="compareStatus" role="status"></p>
@@ -159,9 +160,25 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 </div>
 </section>
 </section>
+<section id="amortView" class="panel" hidden>
+<h2 id="amortTitle">Amortización de créditos</h2>
+<p class="note">El programa viene de las tablas de los créditos. Los pagos registrados se muestran solo si están capturados. El saldo programado no es un saldo bancario actual.</p>
+<div class="actions screen-only">
+<label>Vista <select id="amortModo"><option value="detalle">Tabla por crédito</option><option value="anual">Resumen anual</option></select></label>
+<label id="amortCreditoLabel">Crédito <select id="amortCredito"></select></label>
+<label id="amortAnioLabel" hidden>Año <select id="amortAnio"></select></label>
+<button id="amortActualizar" type="button">Actualizar créditos</button>
+<button id="amortImprimir" type="button" disabled>Imprimir / PDF</button>
+</div>
+<p id="amortEstado" role="status" class="note"></p>
+<div id="amortAvisos"></div>
+<div id="amortSaldo"></div>
+<div id="amortTabla" class="scroll"></div>
+<div id="amortPendientes"></div>
+</section>
 <section id="dailyView" hidden><div class="panel"><h2>Calendario de movimientos</h2><p class="note">“Sin registros” no confirma que el día esté cerrado. Los ingresos sin día asignado permanecen en el total y detalle mensual.</p><div id="calendar" class="calendar"></div></div><div class="panel"><h2 id="dayTitle"></h2><button type="button" id="clearDay" class="screen-only">Ver todo el mes</button><div id="dailyConceptFilter" class="daily-concept-filter screen-only">
-<label for="dailyConcept">Buscar por concepto exacto
-<input id="dailyConcept" type="search" placeholder="Ej. PAGO COFRA NÓMINA" autocomplete="off"></label>
+<label for="dailyConcept">Buscar movimientos por palabras
+<input id="dailyConcept" type="search" placeholder="Ej. Samuel o Samuel trabajos" autocomplete="off"></label>
 <button type="button" id="clearDailyConcept">Limpiar búsqueda</button>
 </div>
 <p id="dailyConceptStatus" class="note" role="status" hidden></p>
@@ -246,23 +263,26 @@ function daily(){
  $('calendar').innerHTML=html;$('dayTitle').textContent=selectedDay?'Detalle del '+dateLabel(selectedDay):'Detalle del mes';renderDailyDetail(e,i);
 }
 function renderDailyDetail(gastos=rows('gastos'),ingresos=rows('ingresos')){
- const normalizeDescription=value=>norm(value).replace(/\s+/g,' ');
- const query=selectedDay?'':normalizeDescription($('dailyConcept').value);
- const matches=r=>normalizeDescription(r.description)===query;
+ const textoBusqueda=value=>norm(value).replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+ const query=selectedDay?[]:textoBusqueda($('dailyConcept').value).split(' ').filter(Boolean);
+ const matches=r=>{
+  const descripcion=textoBusqueda(r.description);
+  return query.every(palabra=>descripcion.includes(palabra));
+ };
  if(selectedDay){
   gastos=gastos.filter(r=>r.date===selectedDay);
   ingresos=ingresos.filter(r=>r.reportDate===selectedDay);
- }else if(query){
+ }else if(query.length){
   gastos=gastos.filter(matches);
   ingresos=ingresos.filter(matches);
  }
  $('dailyConceptFilter').hidden=Boolean(selectedDay);
  const status=$('dailyConceptStatus');
- status.hidden=!query;
- status.textContent=query
+ status.hidden=!query.length;
+ status.textContent=query.length
   ? gastos.length+ingresos.length
     ? 'Coincidencias: '+gastos.length+' gastos y '+ingresos.length+' ingresos. Los totales corresponden a la búsqueda.'
-    : 'No hay movimientos con ese concepto exacto en el mes seleccionado. Escribe la descripción completa.'
+    : 'No hay movimientos que coincidan con todas esas palabras en el mes seleccionado.'
   : '';
  $('dailyExpense').innerHTML=detailTable(gastos,'gastos');
  $('dailyIncome').innerHTML=detailTable(ingresos,'ingresos');
@@ -280,10 +300,10 @@ function render(){report();daily();concepts();sources();mostrarCierre();renderPr
 function openDetail(title,html){if($('overlay').hidden)focusBefore=document.activeElement;$('detailTitle').textContent=title;$('detailEstado').textContent=textoEstadoCierre();$('detail').innerHTML=html;$('overlay').hidden=false;document.body.style.overflow='hidden';$('closeDetail').focus();}
 function closeDetail(){$('overlay').hidden=true;document.body.style.overflow='';if(focusBefore?.isConnected)focusBefore.focus();}
 function groupedExpenseDetail(rs){return rs.length?grouped(rs,r=>r.group).map(([g,items])=>'<h3>'+esc(g)+' · '+cash(sum(items))+'</h3>'+detailTable(items,'gastos')).join(''):detailTable(rs,'gastos');}
-const labels={report:'Reporte general',annual:'Reporte anual',daily:'Movimientos diarios',concepts:'Conceptos',presupuesto:'Presupuesto mensual',sources:'Fuentes de datos'};
+const labels={report:'Reporte general',annual:'Reporte anual',amort:'Amortización de créditos',daily:'Movimientos diarios',concepts:'Conceptos',presupuesto:'Presupuesto mensual',sources:'Fuentes de datos'};
 document.addEventListener('click',e=>{
  const nav=e.target.closest('[data-view]'),day=e.target.closest('[data-day]'),action=e.target.closest('[data-action]'),concept=e.target.closest('[data-concept]');
- if(nav){const v=nav.dataset.view;vistaActiva=v;$('monthLabel').hidden=v==='annual';$('metrics').hidden=v==='annual';cancelarRevision();closeDetail();Object.keys(labels).forEach(k=>$(k+'View').hidden=k!==v);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b===nav));$('ruta').textContent=labels[v];mostrarCierre();renderAnual();}
+ if(nav){const v=nav.dataset.view;vistaActiva=v;$('monthLabel').hidden=v==='annual';$('metrics').hidden=v==='annual'||v==='amort';$('periodoTesoreria').hidden=v==='amort';$('notice').hidden=v==='amort';$('reload').hidden=v==='amort';cancelarRevision();closeDetail();Object.keys(labels).forEach(k=>$(k+'View').hidden=k!==v);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b===nav));$('ruta').textContent=labels[v];mostrarCierre();renderAnual();if(v==='amort'&&!amortDatos)cargarAmort();}
  const presupuesto=e.target.closest('[data-presupuesto]');
  if(presupuesto)detallePresupuesto(presupuesto.dataset.presupuesto);
  if(day){selectedDay=day.dataset.day;daily();}
@@ -311,7 +331,103 @@ function cargar(mensajeConfirmado){
   }catch(error){datos=anterior;selectedDay=dayBefore;$('year').innerHTML=optionsBefore;$('year').value=yearBefore;render();say('No se completó la lectura: '+error.message,true);}finally{finish();}
  }).withFailureHandler(error=>{datos=null;closeDetail();render();say('No se pudo consultar Google Sheets: '+(error?.message||String(error)),true);finish();}).obtenerDatosTesoreria();
 }
-const columnasAnuales=['Mes','Ingresos','Propiedades e inversiones','Nóminas','Gastos financieros','Por clasificar','Gastos totales','UTILIDAD/PÉRDIDA','Estado'];
+const rubrosAnuales=[groups[0],groups[1],gastosEmpresa,groups[2],groups[3]];
+const columnasAnuales=['Mes','Ingresos','Propiedades e inversiones','Nóminas',gastosEmpresa,'Gastos financieros','Por clasificar','Gastos totales','UTILIDAD/PÉRDIDA','Estado'];
+const colGastoTotal=columnasAnuales.indexOf('Gastos totales'),colEstadoAnual=columnasAnuales.length-1;
+let amortDatos=null,amortCargando=false;
+const amortTot=r=>r.capital+r.interes+r.otros;
+const amortCash=(n,m)=>n==null?'—':new Intl.NumberFormat('es-MX',{style:'currency',currency:m}).format(n/100)+' '+m;
+function tablaAmort(columnas,filas){
+ return '<table><thead><tr>'+columnas.map(c=>'<th scope="col">'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+
+  filas.map(f=>'<tr>'+f.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+}
+function resumenAmort(filas,anio){
+ const resultado=new Map();
+ for(const r of filas){
+  const previsto=r.vence.startsWith(anio+'-'),cargos=(r.cargos||[]).filter(c=>c.fecha.startsWith(anio+'-')),registrado=cargos.length;
+  if(!previsto&&!registrado)continue;
+  const s=resultado.get(r.clave)||{id:r.id,empresa:r.empresa,acreedor:r.acreedor,moneda:r.moneda,cuotas:0,programado:0,pagos:0,registrado:0};
+  if(previsto){s.cuotas++;s.programado+=amortTot(r);}
+  if(registrado){s.pagos+=cargos.length;s.registrado+=cargos.reduce((t,c)=>t+c.total,0);}
+  resultado.set(r.clave,s);
+ }
+ return [...resultado.values()].sort((a,b)=>a.empresa.localeCompare(b.empresa,'es')||a.id.localeCompare(b.id,'es'));
+}
+function rendirAmort(){
+ if(!amortDatos)return;
+ const anual=$('amortModo').value==='anual';
+ $('amortCreditoLabel').hidden=anual;$('amortAnioLabel').hidden=!anual;
+ const filas=amortDatos.filas;
+ $('amortSaldo').textContent='';$('amortPendientes').textContent='';
+ if(anual&&amortDatos.pendientes?.some(p=>p.fecha.startsWith($('amortAnio').value+'-')))
+  $('amortPendientes').textContent='El importe registrado del resumen solo incluye cargos asociados a cuotas. Consulta los cargos por conciliar en la ficha de cada crédito.';
+ if(anual){
+  const anio=$('amortAnio').value;
+  $('amortTitle').textContent='Amortización de créditos · '+(anio||'Resumen anual');
+  const rs=resumenAmort(filas,anio);
+  $('amortTabla').innerHTML=rs.length?tablaAmort(
+   ['Empresa','Crédito','Acreedor','Moneda','Cuotas programadas','Importe programado','Pagos capturados','Importe registrado'],
+   rs.map(r=>[r.empresa,r.id,r.acreedor,r.moneda,r.cuotas,amortCash(r.cuotas?r.programado:null,r.moneda),r.pagos,amortCash(r.pagos?r.registrado:null,r.moneda)])):'';
+  $('amortImprimir').disabled=!rs.length;
+ }else{
+  const id=$('amortCredito').value,rs=filas.filter(r=>r.clave===id).sort((a,b)=>a.vence.localeCompare(b.vence)||a.cuota.localeCompare(b.cuota,'es',{numeric:true}));
+  const c=rs[0];
+  $('amortTitle').textContent=c?'Amortización de créditos · '+c.empresa+' / '+c.id:'Amortización de créditos';
+  if(c){
+   const cortes=(amortDatos.saldos||[]).filter(x=>x.clave===id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+   const ultimo=cortes[0];
+   if(ultimo)$('amortSaldo').innerHTML='<h3>Saldo reportado al '+esc(dateLabel(ultimo.fecha))+'</h3><div class="scroll">'+tablaAmort(
+    ['Total del crédito','Parte de Heriberto','Parte de Alcadi'],[[ultimo.total,ultimo.h,ultimo.a].map(n=>amortCash(n,c.moneda))])+
+    '</div><p class="note">Fuente: reporte del contador · '+esc(ultimo.fuente)+'. Este corte y el saldo programado son referencias distintas.</p>'+
+    (cortes.length>1?'<details><summary>Ver cortes anteriores</summary><div class="scroll">'+tablaAmort(
+      ['Corte','Total','Heriberto','Alcadi'],cortes.slice(1).map(x=>[dateLabel(x.fecha),...[x.total,x.h,x.a].map(n=>amortCash(n,c.moneda))]))+'</div></details>':'');
+   const otros=(amortDatos.pendientes||[]).filter(x=>x.clave===id).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+   if(otros.length)$('amortPendientes').innerHTML='<h3>Cargos por conciliar</h3><p class="note">Salidas de Heriberto sin una cuota regular asociada. No se suman al comparativo de cuotas.</p><div class="scroll">'+tablaAmort(
+    ['Fecha de cargo','Importe registrado','Referencia','Motivo'],otros.map(x=>[dateLabel(x.fecha),amortCash(x.total,c.moneda),x.ref,x.motivo]))+'</div>';
+  }
+  $('amortTabla').innerHTML=c?'<h3>Calendario de cuotas BBVA</h3><p class="note">'+esc(c.acreedor+' · '+c.moneda)+' · Las primeras ocho columnas vienen del calendario. El cargo de Heriberto se lee de Gastos y no confirma su aplicación a capital e intereses.</p>'+tablaAmort(
+   ['Periodo','Saldo inicial programado','Fecha de vencimiento','Pago a capital','Interés del periodo','IVA','Pago mensual total','Saldo insoluto programado','Cargo Heriberto (100%)'],
+   rs.map(r=>[r.cuota,amortCash(r.inicial,r.moneda),dateLabel(r.vence),...[r.capital,r.interes,r.otros,amortTot(r),r.saldo,r.pago].map(n=>amortCash(n,r.moneda))]))+
+   (rs.some(r=>r.cargos?.length)?'<details><summary>Ver cargos de Gastos y diferencias</summary>'+tablaAmort(['Periodo','Fecha del cargo','Importe','Origen'],rs.flatMap(r=>(r.cargos||[]).map(c=>[r.cuota,dateLabel(c.fecha),amortCash(c.total,r.moneda),c.ref])))+
+   tablaAmort(['Periodo','Cargo menos cuota'],rs.filter(r=>r.pago!=null&&r.pago!==amortTot(r)).map(r=>[r.cuota,amortCash(r.pago-amortTot(r),r.moneda)]))+'</details>':''):'';
+  $('amortImprimir').disabled=!c;
+ }
+}
+function cargarAmort(){
+ if(amortCargando)return;
+ amortCargando=true;amortDatos=null;
+ $('amortEstado').textContent='Consultando tablas de amortización…';
+ $('amortActualizar').disabled=true;$('amortImprimir').disabled=true;
+ $('amortTabla').textContent='';$('amortSaldo').textContent='';$('amortPendientes').textContent='';$('amortAvisos').textContent='';
+ const fin=()=>{amortCargando=false;$('amortActualizar').disabled=false;};
+ if(typeof google==='undefined'||!google.script?.run){
+  $('amortEstado').textContent='Abre COFRA con tu cuenta autorizada.';fin();return;
+ }
+ google.script.run.withSuccessHandler(d=>{
+  amortDatos=d;fin();
+  $('amortEstado').textContent=d.sinLibro?'Falta conectar el libro Tablas de amortización.':
+    !d.configurada?'Todavía faltan las pestañas de los créditos en el libro Tablas de amortización.':
+    d.avisos.length?'Datos parciales: hay filas omitidas. Revisa los avisos antes de utilizar el reporte.':
+    !d.filas.length?'Todavía no hay tablas registradas.':'Los pagos sin captura se muestran con un guion.';
+  $('amortAvisos').innerHTML=d.avisos.length?'<details><summary>Ver filas por revisar</summary><ul>'+d.avisos.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>':'';
+  const c=$('amortCredito'),a=$('amortAnio'),cPrev=c.value,aPrev=a.value;
+  const creditos=new Map(d.filas.map(r=>[r.clave,r.empresa+' · '+r.id]));
+  const anios=[...new Set(d.filas.flatMap(r=>[r.vence.slice(0,4),...(r.cargos||[]).map(c=>c.fecha.slice(0,4))]))].sort().reverse();
+  c.replaceChildren(...[...creditos].sort((x,y)=>x[1].localeCompare(y[1],'es')).map(([k,label])=>new Option(label,k)));
+  a.replaceChildren(...anios.map(y=>new Option(y,y)));
+  if(creditos.has(cPrev))c.value=cPrev;
+  if(anios.includes(aPrev))a.value=aPrev;
+  else if(anios.includes($('year').value))a.value=$('year').value;
+  rendirAmort();
+ }).withFailureHandler(e=>{fin();$('amortEstado').textContent='No se pudo consultar amortización: '+(e?.message||String(e));}).obtenerAmortizacionCofra();
+}
+['amortModo','amortCredito','amortAnio'].forEach(k=>$(k).onchange=rendirAmort);
+$('amortActualizar').onclick=cargarAmort;
+$('amortImprimir').onclick=()=>{
+ document.body.classList.add('print-amort');
+ try{window.print();}finally{document.body.classList.remove('print-amort');}
+};
+
 function calcularAnual(fuente,anio){
  const agrupar=(registros,tipo)=>{
   const mapa=new Map();
@@ -327,17 +443,17 @@ function calcularAnual(fuente,anio){
  const ingresos=agrupar(fuente.ingresos.records,'ingresos'),gastos=agrupar(fuente.gastos.records,'gastos');
  const filas=months.map((m,j)=>{
   const p=anio+'-'+String(j+1).padStart(2,'0'), i=ingresos.get(p)||[],e=gastos.get(p)||[];
-  const montos=[value(i),...groups.map(g=>e.length?sum(e.filter(r=>r.bucket===g)):null),value(e),diff(value(i),value(e))];
+  const montos=[value(i),...rubrosAnuales.map(g=>e.length?sum(e.filter(r=>apartadoReporte(r)===g)):null),value(e),diff(value(i),value(e))];
   const estado=fuente.cierres?.[p]?.cerrado?'Cerrado':i.length&&e.length?'Abierto · Con registros':i.length||e.length?'Abierto · Parcial':'Sin registros';
   return [m,...montos,estado];
  });
- const mesesConAmbas=filas.filter(f=>f[1]!==null&&f[6]!==null).length;
+ const mesesConAmbas=filas.filter(f=>f[1]!==null&&f[colGastoTotal]!==null).length;
  const totalCol=k=>{const v=filas.map(f=>f[k]).filter(n=>n!==null);return v.length?v.reduce((a,b)=>a+b,0):null;};
- const totales=Array.from({length:6},(_,j)=>totalCol(j+1));
+ const totales=Array.from({length:colGastoTotal},(_,j)=>totalCol(j+1));
  const estado=mesesConAmbas===12?'12 meses con registros de ambas fuentes':'Parcial · '+mesesConAmbas+' de 12 meses con ambas fuentes';
  // No se presenta una diferencia anual si hay meses con solo una fuente.
- const comparable=filas.every(f=>(f[1]===null)===(f[6]===null));
- const diferencia=comparable?diff(totales[0],totales[5]):null;
+ const comparable=filas.every(f=>(f[1]===null)===(f[colGastoTotal]===null));
+ const diferencia=comparable?diff(totales[0],totales[colGastoTotal-1]):null;
  return {filas,total:['Total registrado',...totales,diferencia,estado],estado,comparable};
 }
 const centavosComparativo=n=>n==null?null:Math.sign(n)*Number(Math.abs(n).toLocaleString('en-US',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:2}).replace('.',''));
@@ -363,16 +479,16 @@ function comparativoSeleccionado(actual,anio){
   if(base===anio&&a===b)return null;
   const anterior=(base===anio?actual:calcularAnual(datos,base)).filas[b], nuevo=actual.filas[a];
   const periodoBase=anterior[0]+' '+base, periodoNuevo=nuevo[0]+' '+anio;
-  const filas=columnasAnuales.slice(1,8).map((nombre,j)=>filaComparativa(nombre,centavosComparativo(anterior[j+1]),centavosComparativo(nuevo[j+1])));
+  const filas=columnasAnuales.slice(1,colEstadoAnual).map((nombre,j)=>filaComparativa(nombre,centavosComparativo(anterior[j+1]),centavosComparativo(nuevo[j+1])));
   return {base,filas,titulo:periodoNuevo+' frente a '+periodoBase,
    encabezados:['Rubro',periodoBase+' · Base',periodoNuevo,'Diferencia registrada','Cambio %'],
    archivo:anio+'-'+String(a+1).padStart(2,'0')+'_vs_'+base+'-'+String(b+1).padStart(2,'0'),
-   nota:'Base: '+anterior[8]+'. Seleccionado: '+nuevo[8]+'. Un guion indica falta de datos o que la base es cero para el porcentaje.'};
+   nota:'Base: '+anterior[colEstadoAnual]+'. Seleccionado: '+nuevo[colEstadoAnual]+'. Un guion indica falta de datos o que la base es cero para el porcentaje.'};
  }
  if($('compareMode').value==='full'){
   if(base===anio)return null;
   const anualBase=calcularAnual(datos,base);
-  const filas=columnasAnuales.slice(1,8).flatMap((rubro,j)=>{
+  const filas=columnasAnuales.slice(1,colEstadoAnual).flatMap((rubro,j)=>{
    const c=compararAnuales(actual,anualBase,j+1);
    return [[rubro+' · Total comparable ('+c.meses+'/12 meses)',...c.total.slice(1)],
     ...c.filas.map(f=>[rubro+' · '+f[0],...f.slice(1)])];
@@ -382,7 +498,7 @@ function comparativoSeleccionado(actual,anio){
    nota:'Incluye todos los rubros. Cada total comparable suma solo los meses con importes en ambos años para ese rubro.'};
  }
  const columna=Number($('compareMetric').value);
- if(!base||base===anio||columna<1||columna>7||!Number.isInteger(columna))return null;
+ if(!base||base===anio||columna<1||columna>=colEstadoAnual||!Number.isInteger(columna))return null;
  return {base,titulo:columnasAnuales[columna]+' · '+anio+' frente a '+base,archivo:anio+'_vs_'+base,indicador:columnasAnuales[columna],...compararAnuales(actual,calcularAnual(datos,base),columna)};
 }
 function encabezadosComparativo(base,anio){
@@ -422,7 +538,7 @@ function renderAnual(){
  if(!datos){$('annualStatus').textContent='Datos aún no cargados.';$('annualBody').innerHTML='';return;}
  const a=calcularAnual(datos,anio);
  $('annualStatus').textContent=a.estado+'. '+(!a.comparable?'La diferencia del total se omite porque hay meses con solo una fuente. ':'')+(datos.lecturaIncompleta?'Solo se pudieron leer los meses cerrados.':'');
- const fila=(f,clase='')=>'<tr'+(clase?' class="'+clase+'"':'')+'><th scope="row">'+esc(f[0])+'</th>'+f.slice(1,8).map(v=>'<td class="number">'+(v==null?'—':cash(v))+'</td>').join('')+'<td>'+esc(f[8])+'</td></tr>';
+ const fila=(f,clase='')=>'<tr'+(clase?' class="'+clase+'"':'')+'><th scope="row">'+esc(f[0])+'</th>'+f.slice(1,colEstadoAnual).map(v=>'<td class="number">'+(v==null?'—':cash(v))+'</td>').join('')+'<td>'+esc(f[colEstadoAnual])+'</td></tr>';
  $('annualBody').innerHTML=a.filas.map(f=>fila(f)).join('')+fila(a.total,'subtotal');
  renderComparativo(a,anio);
 }
@@ -433,8 +549,8 @@ function exportarAnual(){
   const anio=$('year').value,a=calcularAnual(datos,anio),x=window.XLSX,wb=x.utils.book_new();
   const notas=[a.estado,datos.lecturaIncompleta?'Solo se pudieron leer los meses cerrados.':'',!a.comparable?'Diferencia anual omitida: hay meses con una sola fuente.':''].filter(Boolean).join('. ');
   const ws=x.utils.aoa_to_sheet([['Reporte anual · '+anio],columnasAnuales,...a.filas,a.total,[],[notas]]);
-  ws['!cols']=[{wch:24},...Array.from({length:7},()=>({wch:24})),{wch:47}];
-  for(let r=2;r<=14;r++)for(let c=1;c<=7;c++){const celda=ws[x.utils.encode_cell({r,c})];if(celda?.t==='n')celda.z='"$"#,##0.00;-"$"#,##0.00';}
+  ws['!cols']=[{wch:24},...Array.from({length:colEstadoAnual-1},()=>({wch:24})),{wch:47}];
+  for(let r=2;r<=14;r++)for(let c=1;c<colEstadoAnual;c++){const celda=ws[x.utils.encode_cell({r,c})];if(celda?.t==='n')celda.z='"$"#,##0.00;-"$"#,##0.00';}
   x.utils.book_append_sheet(wb,ws,'Reporte anual');
   x.writeFile(wb,'COFRA_Reporte_Anual_'+anio+'.xlsx');
  }catch(error){say('No se pudo descargar el Excel anual: '+error.message,true);}
@@ -672,7 +788,7 @@ function textoEstadoCierre() {
 }
 
 function mostrarCierre() {
-  $('cierrePanel').hidden=!datos||vistaActiva==='annual';
+  $('cierrePanel').hidden=!datos||vistaActiva==='annual'||vistaActiva==='amort';
   if(!datos) return;
   const c=datos.cierres?.[period()];
   const contador=!!datos.usuario?.contador;
@@ -824,16 +940,23 @@ $('reload').onclick=cargar;render();cargar();
   function mensaje(s){panel.querySelector('.admin-status').textContent=s;}
   function opciones(select,items){select.replaceChildren();for(const [value,label]of items)select.add(new Option(label,value));}
   function normalizarBusqueda(s){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+  function apartadoConcepto(c){
+    const t=norm(c.apartado);
+    if(t==='gastos de empresa'||((/nomina|empresa/.test(t))&&!/propiedad|infraestructura|financ|credito|pendiente|revisar/.test(t))) {
+      return clavesNomina.has(norm(c.codigo).toUpperCase())?groups[1]:gastosEmpresa;
+    }
+    return c.apartado;
+  }
   function filtrarConceptos(){
     if(!modelo)return;
     const lista=panel.querySelector('#arCodigo'), elegido=lista.value;
     const palabras=normalizarBusqueda(panel.querySelector('#arBusqueda').value).split(/\s+/).filter(Boolean);
     const encontrados=modelo.conceptos.filter(c=>{
-      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo);
+      const texto=normalizarBusqueda(c.grupo+' '+c.concepto+' '+c.codigo+' '+apartadoConcepto(c));
       return palabras.every(p=>texto.includes(p));
     });
     const visibles=modelo.conceptos.filter(c=>c.codigo===elegido||encontrados.includes(c));
-    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+']'])]);
+    opciones(lista,[['','Sin concepto'],...visibles.map(c=>[c.codigo,c.grupo+' · '+c.concepto+' ['+c.codigo+'] · '+apartadoConcepto(c)])]);
     lista.value=elegido;
     panel.querySelector('#arResultados').textContent=palabras.length?(encontrados.length?encontrados.length+' coincidencia(s). Elige en la lista.':'No hay coincidencias.'):'';
   }
@@ -842,7 +965,7 @@ $('reload').onclick=cargar;render();cargar();
     modelo=await rpc('datosAdministracionCofra');
     const conceptos=modelo.conceptos;
     opciones(panel.querySelector('#acGrupo'),[...new Set(conceptos.map(c=>c.grupo))].sort().map(x=>[x,x]));
-    opciones(panel.querySelector('#acApartado'),[...new Set(conceptos.map(c=>c.apartado))].sort().map(x=>[x,x]));
+    opciones(panel.querySelector('#acApartado'),[...new Set([...conceptos.map(c=>c.apartado),gastosEmpresa])].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#acPrefijo'),[...new Set(conceptos.map(c=>c.codigo.split('-')[0]))].sort().map(x=>[x,x]));
     opciones(panel.querySelector('#arExistente'),[['','Nueva regla'],...modelo.reglas.map(r=>[String(r.fila),r.valores[0]+' · '+r.valores[2]])]);
     nuevaRegla();
@@ -854,7 +977,7 @@ $('reload').onclick=cargar;render();cargar();
     estado.textContent='Sesión: '+s.correo+' · '+(s.contador?'Contador':'Consulta');
     if(!s.contador)return;
     panel=document.createElement('section');panel.id='adminCofra';panel.className='screen-only';
-    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>El sistema asigna el siguiente número libre de la serie. No renumera conceptos anteriores.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, grupo o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
+    panel.innerHTML='<h2>Administración del contador</h2><p>Las claves existentes se conservan. Las reglas aprobadas se aplican a los meses abiertos. Los meses cerrados conservan sus movimientos, conceptos, importes y acumulado.</p><p class="admin-status" role="status">Cargando catálogo…</p><div class="admin-grid"><form id="acForm"><h3>Nuevo concepto</h3><label>Nombre<input id="acNombre" required maxlength="500"></label><label>Grupo<select id="acGrupo"></select></label><label>Apartado<select id="acApartado"></select></label><label>Serie de clave<select id="acPrefijo"></select></label><p>Para Gastos de empresa, elige un grupo de empresa y la serie EMP. Nómina conserva los 13 conceptos definidos.</p><button type="submit">Guardar concepto</button></form><form id="arForm"><h3>Reglas</h3><label>Elegir regla o crear nueva<select id="arExistente"></select></label><label>Descripción / términos separados por ;<input id="arDescripcion" required maxlength="500" placeholder="TELMEX; RANCHO"></label><label>Buscar concepto (opcional)<input type="search" id="arBusqueda" placeholder="Escribe nombre, apartado o clave" autocomplete="off" aria-describedby="arResultados"></label><small id="arResultados" role="status"></small><label>Concepto<select id="arCodigo"></select></label><label>Tipo<select id="arTipo"><option>EXACTA</option><option>COMBINACION</option></select></label><label>Estado<select id="arEstado"><option>PENDIENTE</option><option>APROBADA</option><option>INACTIVA</option></select></label><p>Una coincidencia con códigos distintos queda pendiente. Aprobar una regla puede reclasificar movimientos de meses abiertos, incluidos meses anteriores. Los cerrados se conservan.</p><button type="submit">Guardar regla</button></form></div>';
     main.append(panel);
     const busqueda=panel.querySelector('#arBusqueda');
     busqueda.addEventListener('input',filtrarConceptos);
