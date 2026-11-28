@@ -353,6 +353,41 @@ function resumenAmort(filas,anio){
  }
  return [...resultado.values()].sort((a,b)=>a.empresa.localeCompare(b.empresa,'es')||a.id.localeCompare(b.id,'es'));
 }
+function corteGastosAmort(filas,porConciliar){
+ let ultimo=null,ultimoVinculado=null,acumulado=0;
+ // Un cargo vinculado y uno por conciliar pertenecen a listas disjuntas.
+ function contar(c){
+  if(!c||typeof c.fecha!=='string'||!Number.isSafeInteger(c.total))return false;
+  acumulado+=c.total;
+  if(!ultimo||c.fecha>ultimo)ultimo=c.fecha;
+  return true;
+ }
+ for(const r of filas){
+  for(const c of r.cargos||[]){
+   if(!contar(c))continue;
+   if(!ultimoVinculado||c.fecha>ultimoVinculado.fecha||
+      (c.fecha===ultimoVinculado.fecha&&r.vence>ultimoVinculado.cuota.vence))
+    ultimoVinculado={fecha:c.fecha,cuota:r};
+  }
+ }
+ for(const c of porConciliar)contar(c);
+ return {ultimo,ultimoVinculado,acumulado:ultimo===null?null:acumulado};
+}
+function saldoYGastosAmort(filas,porConciliar,cortes,moneda){
+ const d=corteGastosAmort(filas,porConciliar),v=d.ultimoVinculado,ultimo=cortes[0];
+ const fecha=d.ultimo?dateLabel(d.ultimo):'Sin gastos registrados';
+ const periodo=v?'Periodo '+v.cuota.cuota+' · '+dateLabel(v.cuota.vence):'Sin gasto vinculado a una cuota';
+ const notaPendiente=porConciliar.length?' El total registrado incluye cargos por conciliar.':'';
+ const notaFecha=v&&d.ultimo>v.fecha?' El gasto más reciente todavía no está vinculado a una cuota.':'';
+ return '<h3>Resumen al último gasto registrado</h3><div class="scroll">'+tablaAmort(
+  ['Último gasto registrado','Total de gastos registrados','Última cuota vinculada','Saldo según tabla de amortización'],
+  [[fecha,amortCash(d.acumulado,moneda),periodo,amortCash(v?.cuota.saldo,moneda)]])+
+  '</div><p class="note">Los cargos vienen de Gastos. El saldo según la tabla corresponde a la última cuota vinculada y no confirma el saldo real del banco.'+
+  notaPendiente+notaFecha+'</p>'+
+  (ultimo?'<details><summary>Ver saldo reportado por el contador al '+esc(dateLabel(ultimo.fecha))+'</summary><div class="scroll">'+tablaAmort(
+   ['Fecha de corte','Total del crédito reportado','Parte de Heriberto','Parte de Alcadi','Fuente'],
+   cortes.map(x=>[dateLabel(x.fecha),...[x.total,x.h,x.a].map(n=>amortCash(n,moneda)),x.fuente]))+'</div></details>':'');
+}
 function rendirAmort(){
  if(!amortDatos)return;
  const anual=$('amortModo').value==='anual';
@@ -360,7 +395,7 @@ function rendirAmort(){
  const filas=amortDatos.filas;
  $('amortSaldo').textContent='';$('amortPendientes').textContent='';
  if(anual&&amortDatos.pendientes?.some(p=>p.fecha.startsWith($('amortAnio').value+'-')))
-  $('amortPendientes').textContent='El importe registrado del resumen solo incluye cargos asociados a cuotas. Consulta los cargos por conciliar en la ficha de cada crédito.';
+  $('amortPendientes').textContent='El importe registrado del resumen solo incluye cargos asociados a cuotas. Consulta el total de gastos registrados y los cargos por conciliar en la ficha de cada crédito.';
  if(anual){
   const anio=$('amortAnio').value;
   $('amortTitle').textContent='Amortización de créditos · '+(anio||'Resumen anual');
@@ -375,13 +410,8 @@ function rendirAmort(){
   $('amortTitle').textContent=c?'Amortización de créditos · '+c.empresa+' / '+c.id:'Amortización de créditos';
   if(c){
    const cortes=(amortDatos.saldos||[]).filter(x=>x.clave===id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
-   const ultimo=cortes[0];
-   if(ultimo)$('amortSaldo').innerHTML='<h3>Saldo reportado al '+esc(dateLabel(ultimo.fecha))+'</h3><div class="scroll">'+tablaAmort(
-    ['Total del crédito','Parte de Heriberto','Parte de Alcadi'],[[ultimo.total,ultimo.h,ultimo.a].map(n=>amortCash(n,c.moneda))])+
-    '</div><p class="note">Fuente: reporte del contador · '+esc(ultimo.fuente)+'. Este corte y el saldo programado son referencias distintas.</p>'+
-    (cortes.length>1?'<details><summary>Ver cortes anteriores</summary><div class="scroll">'+tablaAmort(
-      ['Corte','Total','Heriberto','Alcadi'],cortes.slice(1).map(x=>[dateLabel(x.fecha),...[x.total,x.h,x.a].map(n=>amortCash(n,c.moneda))]))+'</div></details>':'');
    const otros=(amortDatos.pendientes||[]).filter(x=>x.clave===id).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+   $('amortSaldo').innerHTML=saldoYGastosAmort(rs,otros,cortes,c.moneda);
    if(otros.length)$('amortPendientes').innerHTML='<h3>Cargos por conciliar</h3><p class="note">Salidas de Heriberto sin una cuota regular asociada. No se suman al comparativo de cuotas.</p><div class="scroll">'+tablaAmort(
     ['Fecha de cargo','Importe registrado','Referencia','Motivo'],otros.map(x=>[dateLabel(x.fecha),amortCash(x.total,c.moneda),x.ref,x.motivo]))+'</div>';
   }
