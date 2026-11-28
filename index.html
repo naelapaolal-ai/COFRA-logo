@@ -387,6 +387,24 @@ function fichaAmort(filas,porConciliar){
  const prestado=credito?.moneda==='MXN'&&Object.hasOwn(prestados,credito.id)?prestados[credito.id]:null;
  return {corte,prestado,plazo:meses.size,restantes:restantes.size,saldo:ultima?.saldo??null};
 }
+function desgloseAmort(filas,ultima){
+ const hasta=ultima?filas.filter(r=>r.vence<=ultima.vence):[];
+ const despues=filas.filter(r=>!ultima||r.vence>ultima.vence);
+ const sumar=(rs,k)=>rs.reduce((t,r)=>t+r[k],0);
+ const vinculado=hasta.reduce((t,r)=>t+(r.cargos||[]).reduce((a,c)=>a+c.total,0),0);
+ const coincide=hasta.length>0&&hasta.every(r=>(r.cargos||[]).reduce((t,c)=>t+c.total,0)===amortTot(r));
+ const filasDesglose=[
+  ['Capital',ultima?sumar(hasta,'capital'):null,sumar(despues,'capital')],
+  ['Intereses',ultima?sumar(hasta,'interes'):null,sumar(despues,'interes')]
+ ];
+ if(filas.some(r=>r.otros))filasDesglose.push(['IVA u otros cargos',ultima?sumar(hasta,'otros'):null,sumar(despues,'otros')]);
+ filasDesglose.push(['Total de mensualidades',ultima?hasta.reduce((t,r)=>t+amortTot(r),0):null,despues.reduce((t,r)=>t+amortTot(r),0)]);
+ const nota=ultima
+  ? (coincide?'Los gastos vinculados coinciden con cada cuota hasta este corte. ':'Hay cuotas sin gasto vinculado o con importes distintos a la tabla. ')+
+    'El reparto entre capital e intereses viene de la tabla; no se confirma con el estado de cuenta. Los cargos por conciliar no se incluyen en este desglose.'
+  : 'Aún no hay cuotas vinculadas. La columna de mensualidades restantes muestra el calendario completo.';
+ return {filas:filasDesglose,vinculado:ultima?vinculado:null,nota};
+}
 function saldoYGastosAmort(filas,porConciliar,cortes,moneda){
  const f=fichaAmort(filas,porConciliar),d=f.corte,v=d.ultimoVinculado,ultimo=cortes[0];
  const fecha=d.ultimo?dateLabel(d.ultimo):'Sin gastos registrados';
@@ -398,10 +416,18 @@ function saldoYGastosAmort(filas,porConciliar,cortes,moneda){
   [[amortCash(f.prestado,moneda),f.plazo,f.restantes,amortCash(d.acumulado,moneda),amortCash(f.saldo,moneda)]])+
   '</div><p class="note">Última cuota vinculada: '+esc(periodo)+' · Último gasto: '+esc(fecha)+
   '. Los meses que faltan se cuentan después de esa cuota. El capital por pagar es el saldo programado, sin intereses futuros.'+
-  notaPendiente+notaFecha+'</p>'+
+  notaPendiente+notaFecha+'</p>'+mostrarDesgloseAmort(filas,v?.cuota,moneda)+
   (ultimo?'<details><summary>Ver saldo reportado por el contador al '+esc(dateLabel(ultimo.fecha))+'</summary><div class="scroll">'+tablaAmort(
    ['Fecha de corte','Total del crédito reportado','Parte de Heriberto','Parte de Alcadi','Fuente'],
    cortes.map(x=>[dateLabel(x.fecha),...[x.total,x.h,x.a].map(n=>amortCash(n,moneda)),x.fuente]))+'</div></details>':'');
+}
+function mostrarDesgloseAmort(filas,ultima,moneda){
+ const d=desgloseAmort(filas,ultima);
+ return '<h3>Desglose de mensualidades</h3><div class="scroll">'+tablaAmort(
+  ['Concepto','Programado hasta la última cuota vinculada','Mensualidades restantes según tabla'],
+  d.filas.map(([nombre,pagado,restante])=>[nombre,amortCash(pagado,moneda),amortCash(restante,moneda)]))+
+  '</div>'+(ultima?'<p class="note">Gastos vinculados hasta esta cuota: <strong>'+esc(amortCash(d.vinculado,moneda))+'</strong>.</p>':'')+
+  '<p class="note">'+esc(d.nota)+'</p>';
 }
 function rendirAmort(){
  if(!amortDatos)return;
@@ -508,6 +534,10 @@ function libroAmortExcel(x,datosAmort,modo,filtro){
  hoja('Total del crédito',['Crédito','Empresa','Acreedor','Moneda','Monto prestado','Plazo en meses (según tabla)','Meses que faltan (según tabla)','Pagado registrado','Capital por pagar (según tabla)','Última cuota vinculada','Vencimiento de la cuota','Último gasto registrado','Nota'],
   [[c.id,c.empresa,c.acreedor,c.moneda,importe(f.prestado),f.plazo,f.restantes,importe(corte.acumulado),importe(f.saldo),v?.cuota.cuota??null,fecha(v?.cuota.vence),fecha(corte.ultimo),
    'Meses restantes después de la última cuota vinculada. El saldo es programado y excluye intereses futuros.'+(otros.length?' El total incluye cargos por conciliar.':'')]], [10,11],[4,7,8],[28,17,17,12,21,29,30,22,32,24,24,24,95]);
+ const desglose=desgloseAmort(rs,v?.cuota);
+ hoja('Desglose de mensualidades',['Concepto','Programado hasta la última cuota vinculada','Mensualidades restantes según tabla','Moneda','Nota'],
+  [...desglose.filas.map(([concepto,hasta,restante])=>[concepto,importe(hasta),importe(restante),c.moneda,concepto==='Total de mensualidades'?desglose.nota:'']),
+   ...(v?[['Gastos vinculados hasta esta cuota',importe(desglose.vinculado),null,c.moneda,'Excluye cargos por conciliar.']]:[])],[],[1,2],[40,47,41,14,95]);
  hoja('Tabla de amortización',['Periodo','Saldo inicial programado','Fecha de vencimiento','Pago a capital','Interés del periodo','IVA','Pago mensual total','Saldo insoluto programado','Cargo Heriberto (100%)'],
   rs.map(r=>[r.cuota,importe(r.inicial),fecha(r.vence),...[r.capital,r.interes,r.otros,amortTot(r),r.saldo,r.pago].map(importe)]),[2],[1,3,4,5,6,7,8]);
  const cargos=rs.flatMap(r=>(r.cargos||[]).map(p=>[r.cuota,fecha(p.fecha),importe(p.total),p.ref]));
