@@ -16,6 +16,7 @@
  body:not(.print-compare) #comparePanel{display:none!important}
  body.print-compare main > :not(#annualView),body.print-compare #annualOverview{display:none!important}
  body.print-compare #comparePanel{margin:0}
+ body.print-amort main > :not(#amortView){display:none!important}
 }
 .daily-concept-filter{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:14px 0}
 .daily-concept-filter label{display:grid;gap:6px;flex:1 1 240px;max-width:440px}
@@ -40,7 +41,7 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
  const deployment='AKfycbxEld_l9wFiizE3b5x10pAj9lVGDMgv8NmMkhChTdHlQSamPFJpmnCSMDUBM94140pr';
  const scopes='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email';
  let token='',vence=0,espera=[],autorizando=false;
- const permitidas=new Set(['obtenerDatosTesoreria','obtenerSesionCofra','datosAdministracionCofra','guardarConceptoCofra','guardarReglaCofra','prepararCierreCofra','cerrarMesCofra','reabrirMesCofra','guardarPresupuestoCofra']);
+ const permitidas=new Set(['obtenerDatosTesoreria','obtenerAmortizacionCofra','obtenerSesionCofra','datosAdministracionCofra','guardarConceptoCofra','guardarReglaCofra','prepararCierreCofra','cerrarMesCofra','reabrirMesCofra','guardarPresupuestoCofra']);
  const mensaje=t=>{const n=document.getElementById('cofraAccesoMensaje');if(n)n.textContent=t;};
  function requerirSesion(){
   if(token&&Date.now()<vence)return Promise.resolve();
@@ -100,10 +101,10 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 </head><body class="sin-sesion">
 <section id="cofraAcceso"><div class="tarjeta"><img src="./COFRA-LOGO.jpeg" alt="COFRA"><h1>Tesorería</h1><p id="cofraAccesoMensaje" role="status">Entra con tu cuenta de Google autorizada.</p><button id="cofraEntrar" class="primary" type="button" onclick="cofraEntrar()">Entrar con Google</button><p><small>Se requiere conexión a internet para consultar y guardar datos.</small></p></div></section>
 
-<aside class="sidebar"><div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>COFRA<small>TESORERÍA</small></span></div><p class="nav-label">CONSULTA</p><nav aria-label="Secciones"><button type="button" class="active" data-view="report"><span class="nav-icon">▤</span>Reporte general</button><button type="button" data-view="annual"><span class="nav-icon">▤</span>Reporte anual</button><button type="button" data-view="daily"><span class="nav-icon">▦</span>Movimientos diarios</button><button type="button" data-view="concepts"><span class="nav-icon">☷</span>Conceptos</button><button type="button" data-view="presupuesto"><span class="nav-icon">◫</span>Presupuesto mensual</button><button type="button" data-view="sources"><span class="nav-icon">↗</span>Fuentes de datos</button></nav><div class="sidebar-bottom"><strong>Google Sheets</strong>Consulta al abrir y al pulsar Actualizar datos.</div></aside>
+<aside class="sidebar"><div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>COFRA<small>TESORERÍA</small></span></div><p class="nav-label">CONSULTA</p><nav aria-label="Secciones"><button type="button" class="active" data-view="report"><span class="nav-icon">▤</span>Reporte general</button><button type="button" data-view="annual"><span class="nav-icon">▤</span>Reporte anual</button><button type="button" data-view="amort"><span class="nav-icon">▤</span>Amortización de créditos</button><button type="button" data-view="daily"><span class="nav-icon">▦</span>Movimientos diarios</button><button type="button" data-view="concepts"><span class="nav-icon">☷</span>Conceptos</button><button type="button" data-view="presupuesto"><span class="nav-icon">◫</span>Presupuesto mensual</button><button type="button" data-view="sources"><span class="nav-icon">↗</span>Fuentes de datos</button></nav><div class="sidebar-bottom"><strong>Google Sheets</strong>Consulta al abrir y al pulsar Actualizar datos.</div></aside>
 <div class="appbar"><div class="breadcrumb"><span>COFRA</span><span>/</span><strong id="ruta">Reporte general</strong></div><div class="actions"><button id="cofraInstalar" type="button" onclick="cofraInstalar()" hidden>Instalar COFRA</button><button id="cofraSalir" type="button" onclick="cofraSalir()">Salir</button><span>Google Sheets</span></div></div>
 <main><div class="heading"><div><div class="eyebrow">CONTROL Y SEGUIMIENTO</div><h1>Resumen de tesorería</h1><p>Consulta los ingresos, las salidas del periodo y el detalle de cada concepto.</p></div><button type="button" id="reload" class="primary">Actualizar datos</button></div>
-<div class="panel period"><div><label id="monthLabel">Periodo<select id="month"></select></label><label>Año<select id="year"><option>2026</option></select></label></div><div class="actions"><span class="source-label">Fuente: Google Sheets</span><button type="button" id="print">Imprimir / PDF</button><button type="button" id="excel" disabled>Descargar Excel</button></div></div>
+<div id="periodoTesoreria" class="panel period"><div><label id="monthLabel">Periodo<select id="month"></select></label><label>Año<select id="year"><option>2026</option></select></label></div><div class="actions"><span class="source-label">Fuente: Google Sheets</span><button type="button" id="print">Imprimir / PDF</button><button type="button" id="excel" disabled>Descargar Excel</button></div></div>
 <section id="cierrePanel" class="panel screen-only" hidden>
   <div class="actions">
     <div><strong id="cierreEstado"></strong><p id="cierreDescripcion" class="note"></p></div>
@@ -158,6 +159,22 @@ body.sin-sesion>aside,body.sin-sesion>.appbar,body.sin-sesion>main{display:none}
 <div class="scroll"><table><thead id="compareHead"></thead><tbody id="compareBody"></tbody></table></div>
 </div>
 </section>
+</section>
+<section id="amortView" class="panel" hidden>
+<h2 id="amortTitle">Amortización de créditos</h2>
+<p class="note">El programa viene de las tablas de los créditos. Los pagos registrados se muestran solo si están capturados. El saldo programado no es un saldo bancario actual.</p>
+<div class="actions screen-only">
+<label>Vista <select id="amortModo"><option value="detalle">Tabla por crédito</option><option value="anual">Resumen anual</option></select></label>
+<label id="amortCreditoLabel">Crédito <select id="amortCredito"></select></label>
+<label id="amortAnioLabel" hidden>Año <select id="amortAnio"></select></label>
+<button id="amortActualizar" type="button">Actualizar créditos</button>
+<button id="amortImprimir" type="button" disabled>Imprimir / PDF</button>
+</div>
+<p id="amortEstado" role="status" class="note"></p>
+<div id="amortAvisos"></div>
+<div id="amortSaldo"></div>
+<div id="amortTabla" class="scroll"></div>
+<div id="amortPendientes"></div>
 </section>
 <section id="dailyView" hidden><div class="panel"><h2>Calendario de movimientos</h2><p class="note">“Sin registros” no confirma que el día esté cerrado. Los ingresos sin día asignado permanecen en el total y detalle mensual.</p><div id="calendar" class="calendar"></div></div><div class="panel"><h2 id="dayTitle"></h2><button type="button" id="clearDay" class="screen-only">Ver todo el mes</button><div id="dailyConceptFilter" class="daily-concept-filter screen-only">
 <label for="dailyConcept">Buscar movimientos por palabras
@@ -283,10 +300,10 @@ function render(){report();daily();concepts();sources();mostrarCierre();renderPr
 function openDetail(title,html){if($('overlay').hidden)focusBefore=document.activeElement;$('detailTitle').textContent=title;$('detailEstado').textContent=textoEstadoCierre();$('detail').innerHTML=html;$('overlay').hidden=false;document.body.style.overflow='hidden';$('closeDetail').focus();}
 function closeDetail(){$('overlay').hidden=true;document.body.style.overflow='';if(focusBefore?.isConnected)focusBefore.focus();}
 function groupedExpenseDetail(rs){return rs.length?grouped(rs,r=>r.group).map(([g,items])=>'<h3>'+esc(g)+' · '+cash(sum(items))+'</h3>'+detailTable(items,'gastos')).join(''):detailTable(rs,'gastos');}
-const labels={report:'Reporte general',annual:'Reporte anual',daily:'Movimientos diarios',concepts:'Conceptos',presupuesto:'Presupuesto mensual',sources:'Fuentes de datos'};
+const labels={report:'Reporte general',annual:'Reporte anual',amort:'Amortización de créditos',daily:'Movimientos diarios',concepts:'Conceptos',presupuesto:'Presupuesto mensual',sources:'Fuentes de datos'};
 document.addEventListener('click',e=>{
  const nav=e.target.closest('[data-view]'),day=e.target.closest('[data-day]'),action=e.target.closest('[data-action]'),concept=e.target.closest('[data-concept]');
- if(nav){const v=nav.dataset.view;vistaActiva=v;$('monthLabel').hidden=v==='annual';$('metrics').hidden=v==='annual';cancelarRevision();closeDetail();Object.keys(labels).forEach(k=>$(k+'View').hidden=k!==v);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b===nav));$('ruta').textContent=labels[v];mostrarCierre();renderAnual();}
+ if(nav){const v=nav.dataset.view;vistaActiva=v;$('monthLabel').hidden=v==='annual';$('metrics').hidden=v==='annual'||v==='amort';$('periodoTesoreria').hidden=v==='amort';$('notice').hidden=v==='amort';$('reload').hidden=v==='amort';cancelarRevision();closeDetail();Object.keys(labels).forEach(k=>$(k+'View').hidden=k!==v);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b===nav));$('ruta').textContent=labels[v];mostrarCierre();renderAnual();if(v==='amort'&&!amortDatos)cargarAmort();}
  const presupuesto=e.target.closest('[data-presupuesto]');
  if(presupuesto)detallePresupuesto(presupuesto.dataset.presupuesto);
  if(day){selectedDay=day.dataset.day;daily();}
@@ -317,6 +334,100 @@ function cargar(mensajeConfirmado){
 const rubrosAnuales=[groups[0],groups[1],gastosEmpresa,groups[2],groups[3]];
 const columnasAnuales=['Mes','Ingresos','Propiedades e inversiones','Nóminas',gastosEmpresa,'Gastos financieros','Por clasificar','Gastos totales','UTILIDAD/PÉRDIDA','Estado'];
 const colGastoTotal=columnasAnuales.indexOf('Gastos totales'),colEstadoAnual=columnasAnuales.length-1;
+let amortDatos=null,amortCargando=false;
+const amortTot=r=>r.capital+r.interes+r.otros;
+const amortCash=(n,m)=>n==null?'—':new Intl.NumberFormat('es-MX',{style:'currency',currency:m}).format(n/100)+' '+m;
+function tablaAmort(columnas,filas){
+ return '<table><thead><tr>'+columnas.map(c=>'<th scope="col">'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+
+  filas.map(f=>'<tr>'+f.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+}
+function resumenAmort(filas,anio){
+ const resultado=new Map();
+ for(const r of filas){
+  const previsto=r.vence.startsWith(anio+'-'),cargos=(r.cargos||[]).filter(c=>c.fecha.startsWith(anio+'-')),registrado=cargos.length;
+  if(!previsto&&!registrado)continue;
+  const s=resultado.get(r.clave)||{id:r.id,empresa:r.empresa,acreedor:r.acreedor,moneda:r.moneda,cuotas:0,programado:0,pagos:0,registrado:0};
+  if(previsto){s.cuotas++;s.programado+=amortTot(r);}
+  if(registrado){s.pagos+=cargos.length;s.registrado+=cargos.reduce((t,c)=>t+c.total,0);}
+  resultado.set(r.clave,s);
+ }
+ return [...resultado.values()].sort((a,b)=>a.empresa.localeCompare(b.empresa,'es')||a.id.localeCompare(b.id,'es'));
+}
+function rendirAmort(){
+ if(!amortDatos)return;
+ const anual=$('amortModo').value==='anual';
+ $('amortCreditoLabel').hidden=anual;$('amortAnioLabel').hidden=!anual;
+ const filas=amortDatos.filas;
+ $('amortSaldo').textContent='';$('amortPendientes').textContent='';
+ if(anual&&amortDatos.pendientes?.some(p=>p.fecha.startsWith($('amortAnio').value+'-')))
+  $('amortPendientes').textContent='El importe registrado del resumen solo incluye cargos asociados a cuotas. Consulta los cargos por conciliar en la ficha de cada crédito.';
+ if(anual){
+  const anio=$('amortAnio').value;
+  $('amortTitle').textContent='Amortización de créditos · '+(anio||'Resumen anual');
+  const rs=resumenAmort(filas,anio);
+  $('amortTabla').innerHTML=rs.length?tablaAmort(
+   ['Empresa','Crédito','Acreedor','Moneda','Cuotas programadas','Importe programado','Pagos capturados','Importe registrado'],
+   rs.map(r=>[r.empresa,r.id,r.acreedor,r.moneda,r.cuotas,amortCash(r.cuotas?r.programado:null,r.moneda),r.pagos,amortCash(r.pagos?r.registrado:null,r.moneda)])):'';
+  $('amortImprimir').disabled=!rs.length;
+ }else{
+  const id=$('amortCredito').value,rs=filas.filter(r=>r.clave===id).sort((a,b)=>a.vence.localeCompare(b.vence)||a.cuota.localeCompare(b.cuota,'es',{numeric:true}));
+  const c=rs[0];
+  $('amortTitle').textContent=c?'Amortización de créditos · '+c.empresa+' / '+c.id:'Amortización de créditos';
+  if(c){
+   const cortes=(amortDatos.saldos||[]).filter(x=>x.clave===id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+   const ultimo=cortes[0];
+   if(ultimo)$('amortSaldo').innerHTML='<h3>Saldo reportado al '+esc(dateLabel(ultimo.fecha))+'</h3><div class="scroll">'+tablaAmort(
+    ['Total del crédito','Parte de Heriberto','Parte de Alcadi'],[[ultimo.total,ultimo.h,ultimo.a].map(n=>amortCash(n,c.moneda))])+
+    '</div><p class="note">Fuente: reporte del contador · '+esc(ultimo.fuente)+'. Este corte y el saldo programado son referencias distintas.</p>'+
+    (cortes.length>1?'<details><summary>Ver cortes anteriores</summary><div class="scroll">'+tablaAmort(
+      ['Corte','Total','Heriberto','Alcadi'],cortes.slice(1).map(x=>[dateLabel(x.fecha),...[x.total,x.h,x.a].map(n=>amortCash(n,c.moneda))]))+'</div></details>':'');
+   const otros=(amortDatos.pendientes||[]).filter(x=>x.clave===id).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+   if(otros.length)$('amortPendientes').innerHTML='<h3>Cargos por conciliar</h3><p class="note">Salidas de Heriberto sin una cuota regular asociada. No se suman al comparativo de cuotas.</p><div class="scroll">'+tablaAmort(
+    ['Fecha de cargo','Importe registrado','Referencia','Motivo'],otros.map(x=>[dateLabel(x.fecha),amortCash(x.total,c.moneda),x.ref,x.motivo]))+'</div>';
+  }
+  $('amortTabla').innerHTML=c?'<h3>Calendario de cuotas BBVA</h3><p class="note">'+esc(c.acreedor+' · '+c.moneda)+' · Las primeras ocho columnas vienen del calendario. El cargo de Heriberto se lee de Gastos y no confirma su aplicación a capital e intereses.</p>'+tablaAmort(
+   ['Periodo','Saldo inicial programado','Fecha de vencimiento','Pago a capital','Interés del periodo','IVA','Pago mensual total','Saldo insoluto programado','Cargo Heriberto (100%)'],
+   rs.map(r=>[r.cuota,amortCash(r.inicial,r.moneda),dateLabel(r.vence),...[r.capital,r.interes,r.otros,amortTot(r),r.saldo,r.pago].map(n=>amortCash(n,r.moneda))]))+
+   (rs.some(r=>r.cargos?.length)?'<details><summary>Ver cargos de Gastos y diferencias</summary>'+tablaAmort(['Periodo','Fecha del cargo','Importe','Origen'],rs.flatMap(r=>(r.cargos||[]).map(c=>[r.cuota,dateLabel(c.fecha),amortCash(c.total,r.moneda),c.ref])))+
+   tablaAmort(['Periodo','Cargo menos cuota'],rs.filter(r=>r.pago!=null&&r.pago!==amortTot(r)).map(r=>[r.cuota,amortCash(r.pago-amortTot(r),r.moneda)]))+'</details>':''):'';
+  $('amortImprimir').disabled=!c;
+ }
+}
+function cargarAmort(){
+ if(amortCargando)return;
+ amortCargando=true;amortDatos=null;
+ $('amortEstado').textContent='Consultando tablas de amortización…';
+ $('amortActualizar').disabled=true;$('amortImprimir').disabled=true;
+ $('amortTabla').textContent='';$('amortSaldo').textContent='';$('amortPendientes').textContent='';$('amortAvisos').textContent='';
+ const fin=()=>{amortCargando=false;$('amortActualizar').disabled=false;};
+ if(typeof google==='undefined'||!google.script?.run){
+  $('amortEstado').textContent='Abre COFRA con tu cuenta autorizada.';fin();return;
+ }
+ google.script.run.withSuccessHandler(d=>{
+  amortDatos=d;fin();
+  $('amortEstado').textContent=d.sinLibro?'Falta conectar el libro Tablas de amortización.':
+    !d.configurada?'Todavía faltan las pestañas de los créditos en el libro Tablas de amortización.':
+    d.avisos.length?'Datos parciales: hay filas omitidas. Revisa los avisos antes de utilizar el reporte.':
+    !d.filas.length?'Todavía no hay tablas registradas.':'Los pagos sin captura se muestran con un guion.';
+  $('amortAvisos').innerHTML=d.avisos.length?'<details><summary>Ver filas por revisar</summary><ul>'+d.avisos.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>':'';
+  const c=$('amortCredito'),a=$('amortAnio'),cPrev=c.value,aPrev=a.value;
+  const creditos=new Map(d.filas.map(r=>[r.clave,r.empresa+' · '+r.id]));
+  const anios=[...new Set(d.filas.flatMap(r=>[r.vence.slice(0,4),...(r.cargos||[]).map(c=>c.fecha.slice(0,4))]))].sort().reverse();
+  c.replaceChildren(...[...creditos].sort((x,y)=>x[1].localeCompare(y[1],'es')).map(([k,label])=>new Option(label,k)));
+  a.replaceChildren(...anios.map(y=>new Option(y,y)));
+  if(creditos.has(cPrev))c.value=cPrev;
+  if(anios.includes(aPrev))a.value=aPrev;
+  else if(anios.includes($('year').value))a.value=$('year').value;
+  rendirAmort();
+ }).withFailureHandler(e=>{fin();$('amortEstado').textContent='No se pudo consultar amortización: '+(e?.message||String(e));}).obtenerAmortizacionCofra();
+}
+['amortModo','amortCredito','amortAnio'].forEach(k=>$(k).onchange=rendirAmort);
+$('amortActualizar').onclick=cargarAmort;
+$('amortImprimir').onclick=()=>{
+ document.body.classList.add('print-amort');
+ try{window.print();}finally{document.body.classList.remove('print-amort');}
+};
+
 function calcularAnual(fuente,anio){
  const agrupar=(registros,tipo)=>{
   const mapa=new Map();
@@ -677,7 +788,7 @@ function textoEstadoCierre() {
 }
 
 function mostrarCierre() {
-  $('cierrePanel').hidden=!datos||vistaActiva==='annual';
+  $('cierrePanel').hidden=!datos||vistaActiva==='annual'||vistaActiva==='amort';
   if(!datos) return;
   const c=datos.cierres?.[period()];
   const contador=!!datos.usuario?.contador;
